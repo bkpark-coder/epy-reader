@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>나의 서재</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;700&family=Lora:ital,wght@0,400;0,600;1,400;1,600&family=Noto+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="lib/jszip.min.js"></script>
+  <script src="lib/pdf.min.js"></script>
+  <script src="lib/marked.min.js"></script>
+  <script src="lib/mammoth.browser.min.js"></script>
+</head>
+<body class="theme-light sidebar-open">
+
+  <!-- 상단 툴바 -->
+  <header class="toolbar">
+    <div class="toolbar-left">
+      <button id="btnSidebar" title="사이드바 토글">&#9776;</button>
+      <button id="btnHome" title="서재로 돌아가기">&#8592; <span class="btn-label">서재</span></button>
+      <button id="btnPopupViewer" title="별도 창으로 보기 (W)">&#10697;</button>
+      <!-- 보기 모드 토글 (reader-mode에서만 표시) -->
+      <div class="view-mode-toggle" id="viewModeToggle">
+        <button class="vmt-btn" id="btnFlipMode"   title="페이지 넘김 모드">&#128366;</button>
+        <button class="vmt-btn" id="btnScrollMode" title="세로 스크롤 모드">&#128196;</button>
+      </div>
+      <span id="bookTitle">나의 서재</span>
+    </div>
+    <div class="toolbar-center">
+      <div class="progress-track">
+        <div id="progressBar"></div>
+      </div>
+      <span id="progressText">0%</span>
+      <div id="pdfProgress" style="display:none">
+        <button id="btnPdfPrev" class="pdf-nav-btn" title="이전 페이지 (←)">&#9664;</button>
+        <span id="pdfPageInfo">P. 1 / 1</span>
+        <button id="btnPdfNext" class="pdf-nav-btn" title="다음 페이지 (→)">&#9654;</button>
+        <span id="pdfPctText">(0%)</span>
+      </div>
+    </div>
+    <div class="toolbar-right">
+      <button class="theme-btn" data-theme="light"  title="라이트 모드">&#9728;</button>
+      <button class="theme-btn" data-theme="sepia"  title="세피아 모드">&#128218;</button>
+      <button class="theme-btn" data-theme="dark"   title="다크 모드">&#9790;</button>
+      <button class="theme-btn" data-theme="oled"   title="OLED 블랙">&#9899;</button>
+      <button id="btnReview" title="독서 기록">&#9733; 서평</button>
+    </div>
+  </header>
+
+  <!-- 독서 컨트롤 바 (문서 열리면 표시) -->
+  <div class="reader-controls" id="readerControls" style="display:none">
+    <!-- PDF 전용 컨트롤 -->
+    <div class="rc-group" id="pdfCtrl">
+      <button id="btnFitWidth"   class="rc-btn rc-active" title="너비 맞춤 (W)">&#8596; 너비</button>
+      <button id="btnFitPage"    class="rc-btn" title="페이지 맞춤 (P)">&#9634; 전체</button>
+      <div class="rc-sep"></div>
+      <button id="btnZoomOut"    class="rc-btn rc-icon" title="축소 (-)">&#8722;</button>
+      <span   id="zoomLevel"    class="rc-val">100%</span>
+      <button id="btnZoomIn"     class="rc-btn rc-icon" title="확대 (+)">&#43;</button>
+      <div class="rc-sep"></div>
+      <button id="btnSinglePage" class="rc-btn rc-active" title="단면 보기">&#9646;</button>
+      <button id="btnSpreadPage" class="rc-btn" title="양면 보기">&#9646;&#9646;</button>
+    </div>
+    <!-- EPUB / TXT / MD 전용 컨트롤 -->
+    <div class="rc-group" id="textCtrl" style="display:none">
+      <button id="btnFontDec"   class="rc-btn" title="글자 줄이기">A&#8722;</button>
+      <span   id="fontSizeDisp" class="rc-val">17px</span>
+      <button id="btnFontInc"   class="rc-btn" title="글자 키우기">A&#43;</button>
+      <div class="rc-sep"></div>
+      <button id="btnLineDec"   class="rc-btn" title="줄 간격 좁히기">줄&#8722;</button>
+      <button id="btnLineInc"   class="rc-btn" title="줄 간격 넓히기">줄&#43;</button>
+      <div class="rc-sep"></div>
+      <button id="btnMarginDec" class="rc-btn" title="여백 좁히기">&#8634;</button>
+      <button id="btnMarginInc" class="rc-btn" title="여백 넓히기">&#8635;</button>
+    </div>
+    <!-- 공통 -->
+    <div class="rc-group rc-right">
+      <button id="btnFullscreen" class="rc-btn" title="전체화면 (F)">&#9974;</button>
+    </div>
+  </div>
+
+  <div class="main-layout">
+
+    <!-- 사이드바 -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-tabs">
+        <button class="tab-btn active" data-tab="library">서재</button>
+        <button class="tab-btn" data-tab="toc">목차</button>
+        <button class="tab-btn" data-tab="quotes">필사</button>
+      </div>
+      <div class="tab-panel active" id="tab-library">
+        <div class="empty-state">
+          <p>&#128218; 읽은 책이 없습니다.</p>
+          <p>파일을 드래그해 보세요.</p>
+        </div>
+      </div>
+      <div class="tab-panel" id="tab-toc">
+        <div class="empty-state"><p>&#128195; 책을 열면 목차가 표시됩니다.</p></div>
+      </div>
+      <div class="tab-panel" id="tab-quotes">
+        <div class="empty-state">
+          <p>&#9998; 필사한 문장이 없습니다.</p>
+          <p>본문을 드래그하여 저장하세요.</p>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 좌/우 탭 인디케이터 (플립 모드 호버 화살표) -->
+    <div class="tap-indicator" id="tapLeft">&#8249;</div>
+    <div class="tap-indicator" id="tapRight">&#8250;</div>
+
+    <!-- 독서 영역 -->
+    <main class="reader-area" id="readerArea">
+
+      <!-- 홈 화면 (서재 대시보드) -->
+      <div id="homeScreen">
+
+        <!-- 히어로 — 브랜딩 + 통계 -->
+        <div class="home-hero">
+          <div class="home-brand">
+            <p class="home-brand-en">My Private Atelier</p>
+            <h1 class="home-brand-kr">나의 서재</h1>
+          </div>
+          <div class="home-stats-row" id="homeStats">
+            <!-- JS가 stat-chip들을 채워 넣습니다 -->
+          </div>
+        </div>
+
+        <!-- 드래그 앤 드롭 업로드 존 -->
+        <div class="drop-zone" id="dropZone">
+          <div class="drop-zone-inner">
+            <div class="drop-icon">&#128218;</div>
+            <h2>문서를 드래그하거나 클릭하여 불러오세요</h2>
+            <p>열면 바로 읽기 &mdash; 클릭 한 번으로 이어 읽기</p>
+            <div class="drop-formats">
+              <span class="drop-fmt epub">ePub</span>
+              <span class="drop-fmt pdf">PDF</span>
+              <span class="drop-fmt docx">DOCX</span>
+              <span class="drop-fmt md">Markdown</span>
+              <span class="drop-fmt txt">TXT</span>
+              <span class="drop-fmt hwp">HWP</span>
+            </div>
+          </div>
+          <input type="file" id="fileInput" accept=".epub,.epub3,.txt,.pdf,.md,.docx,.hwp,.hwpx" hidden>
+        </div>
+
+        <!-- 최근 읽은 책 갤러리 -->
+        <div class="recent-section" id="recentSection" style="display:none">
+          <h2 class="recent-title">최근 읽은 책</h2>
+          <div class="recent-grid" id="recentGrid"></div>
+        </div>
+
+      </div><!-- /#homeScreen -->
+
+      <!-- 책 본문 -->
+      <div class="book-wrapper" id="bookWrapper" style="display:none">
+        <div class="book-content" id="bookContent"></div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- 필사 툴팁 -->
+  <div class="quote-tooltip" id="quoteTooltip" style="display:none">
+    <button id="btnSaveQuote">&#9998; 필사하기</button>
+  </div>
+
+  <!-- 서평 모달 -->
+  <div class="modal-overlay" id="reviewModal" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>&#128221; 독서 기록</h3>
+        <button id="btnCloseReview" class="modal-close">&#10005;</button>
+      </div>
+      <p class="modal-book-title" id="modalBookTitle"></p>
+
+      <label class="field-label">별점</label>
+      <div class="star-rating" id="starRating">
+        <span class="star" data-value="1">&#9733;</span>
+        <span class="star" data-value="2">&#9733;</span>
+        <span class="star" data-value="3">&#9733;</span>
+        <span class="star" data-value="4">&#9733;</span>
+        <span class="star" data-value="5">&#9733;</span>
+      </div>
+
+      <label class="field-label" for="reviewText">한 줄 서평</label>
+      <textarea id="reviewText" placeholder="이 책에 대한 생각을 남겨보세요..."></textarea>
+
+      <label class="complete-check">
+        <input type="checkbox" id="completeCheck">
+        <span>&#10003; 완독 완료</span>
+      </label>
+
+      <div class="modal-actions">
+        <button id="btnSaveReview">저장하기</button>
+        <button id="btnCancelReview">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
